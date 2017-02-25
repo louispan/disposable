@@ -38,7 +38,9 @@ instance Disposable SomeDisposable where
 
 -- | Allow generic deriving instances of things that can be made into 'SomeDisposable'
 -- If a data type derives from Generic, and only contain instances of Disposable,
--- then it can be made an instance of Disposing.
+-- then it can be made an instance of 'Disposing'.
+-- data Callbacks { ... } deriving Generic
+-- instance Disposing Callbacks
 class Disposing a where
   disposing :: a -> SomeDisposable
   default disposing :: (G.Generic a, GDisposing (G.Rep a)) => a -> SomeDisposable
