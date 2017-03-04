@@ -29,10 +29,12 @@ instance Disposable (J.Callback a) where
 
 -- | Allows storing 'Disposable's in a heterogenous container
 data SomeDisposable where
+    DisposeNone :: SomeDisposable
     Dispose :: forall a. Disposable a => a -> SomeDisposable
     DisposeList :: forall a. Disposable a => [a] -> SomeDisposable
 
 instance Disposable SomeDisposable where
+    dispose DisposeNone = pure ()
     dispose (Dispose a) = dispose a
     dispose (DisposeList as) = traverse_ dispose as
 
