@@ -22,11 +22,6 @@ import qualified GHCJS.Foreign.Callback as J
 class Disposable a where
     dispose :: a -> IO ()
 
-#ifdef __GHCJS__
-instance Disposable (J.Callback a) where
-    dispose = J.releaseCallback
-#endif
-
 -- | Allows storing 'Disposable's in a heterogenous container
 data SomeDisposable where
     DisposeNone :: SomeDisposable
@@ -48,6 +43,14 @@ class Disposing a where
   default disposing :: (G.Generic a, GDisposing (G.Rep a)) => a -> SomeDisposable
   disposing x = DisposeList . D.toList . gDisposing $ G.from x
 
+#ifdef __GHCJS__
+instance Disposable (J.Callback a) where
+    dispose = J.releaseCallback
+
+instance Disposing (J.Callback a) where
+    disposing = Dispose
+#endif
+
 -- | Generics instance basically traverses the data tree
 -- and expects the values to be all instances of 'Disposable'
 class GDisposing f where
@@ -63,8 +66,8 @@ instance (GDisposing f, GDisposing g) => GDisposing (f G.:+: g) where
 instance (GDisposing f, GDisposing g) => GDisposing (f G.:*: g) where
   gDisposing (x G.:*: y) = (gDisposing x) <> (gDisposing y)
 
-instance (Disposable c) => GDisposing (G.K1 i c) where
-  gDisposing (G.K1 x) = D.singleton $ Dispose x
+instance (Disposing c) => GDisposing (G.K1 i c) where
+  gDisposing (G.K1 x) = D.singleton $ disposing x
 
 instance (GDisposing f) => GDisposing (G.M1 i t f) where
   gDisposing (G.M1 x) = gDisposing x
