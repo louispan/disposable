@@ -13,10 +13,7 @@ import qualified Data.DList as D
 import Data.Foldable
 import Data.Semigroup
 import qualified GHC.Generics as G
-
-#ifdef __GHCJS__
 import qualified GHCJS.Foreign.Callback as J
-#endif
 
 -- | A 'Disposable' is something with some resources to release
 class Disposable a where
@@ -43,13 +40,11 @@ class Disposing a where
   default disposing :: (G.Generic a, GDisposing (G.Rep a)) => a -> SomeDisposable
   disposing x = DisposeList . D.toList . gDisposing $ G.from x
 
-#ifdef __GHCJS__
 instance Disposable (J.Callback a) where
     dispose = J.releaseCallback
 
 instance Disposing (J.Callback a) where
     disposing = Dispose
-#endif
 
 -- | Generics instance basically traverses the data tree
 -- and expects the values to be all instances of 'Disposable'
