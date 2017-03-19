@@ -31,10 +31,21 @@ instance Disposable SomeDisposable where
     dispose (DisposeList as) = traverse_ dispose as
 
 -- | Allow generic deriving instances of things that can be made into 'SomeDisposable'
--- If a data type derives from Generic, and only contain instances of Disposable,
--- then it can be made an instance of 'Disposing'.
--- data Callbacks { ... } deriving Generic
--- instance Disposing Callbacks
+-- If a data type derives from Generic, and only contain instances of Disposing,
+-- then it can also be made an instance of 'Disposing'.
+-- Eg.
+-- @
+-- import Glazier.React as R
+-- import GHCJS.Foreign.Callback as J
+-- import GHC.Generics as G
+--
+-- data Plan = Plan
+--     { _component :: R.ReactComponent
+--     , _onRender :: J.Callback (J.JSVal -> IO J.JSVal)
+--     ...
+--     } deriving G.Generic
+-- instance Disposing Plan
+-- @
 class Disposing a where
   disposing :: a -> SomeDisposable
   default disposing :: (G.Generic a, GDisposing (G.Rep a)) => a -> SomeDisposable
@@ -46,8 +57,8 @@ instance Disposable (J.Callback a) where
 instance Disposing (J.Callback a) where
     disposing = Dispose
 
--- | Generics instance basically traverses the data tree
--- and expects the values to be all instances of 'Disposable'
+-- | Generic instance basically traverses the data type structure
+-- and expects the values to be all instances of 'Disposing'
 class GDisposing f where
     gDisposing :: f p -> D.DList SomeDisposable
 
