@@ -13,10 +13,14 @@ import Data.Foldable
 import Data.Semigroup
 import qualified GHC.Generics as G
 import qualified GHCJS.Foreign.Callback as J
+import qualified GHCJS.Types as J
 
 -- | A 'Disposable' is something with some resources to release
 class Disposable a where
     dispose :: a -> IO ()
+
+instance Disposable (J.Callback a) where
+    dispose = J.releaseCallback
 
 -- | Allows storing 'Disposable's in a heterogenous container
 data SomeDisposable where
@@ -50,11 +54,23 @@ class Disposing a where
   default disposing :: (G.Generic a, GDisposing (G.Rep a)) => a -> SomeDisposable
   disposing x = DisposeList . D.toList . gDisposing $ G.from x
 
-instance Disposable (J.Callback a) where
-    dispose = J.releaseCallback
+instance Disposing SomeDisposable where
+    disposing = id
 
 instance Disposing (J.Callback a) where
     disposing = Dispose
+
+instance Disposing Int where
+    disposing _ = DisposeNone
+
+instance Disposing J.JSString where
+    disposing _ = DisposeNone
+
+instance Disposing J.JSVal where
+    disposing _ = DisposeNone
+
+instance Disposing a => Disposing (D.DList a) where
+    disposing xs = DisposeList $ disposing <$> D.toList xs
 
 -- | Generic instance basically traverses the data type structure
 -- and expects the values to be all instances of 'Disposing'
