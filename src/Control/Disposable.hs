@@ -1,94 +1,125 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Control.Disposable where
+module Control.Disposable
+    ( Disposable -- constructor not exported
+    , runDisposable
+    , Dispose(..)
+    , GDispose(..)
+    ) where
 
-import qualified Data.DList as D
-import Data.Foldable
+import Control.Monad
+import Control.Concurrent.STM
+import qualified Data.DList as DL
+import Data.IORef
 import Data.Semigroup
 import qualified GHC.Generics as G
 import qualified GHCJS.Foreign.Callback as J
 import qualified GHCJS.Types as J
+import qualified JavaScript.Extras.JSVar as JE
 
--- | A 'Disposable' is something with some resources to release
-class Disposable a where
-    dispose :: a -> IO ()
+-- | A wrapper around authorized IO actions.
+newtype Disposable a = Disposable { runDisposable :: Maybe (IO a) }
+    deriving Functor
 
-instance Disposable (J.Callback a) where
-    dispose = J.releaseCallback
+instance Semigroup (Disposable ()) where
+    (Disposable Nothing) <> f = f
+    f <> (Disposable Nothing) = f
+    (Disposable (Just f)) <> (Disposable (Just g)) = Disposable (Just (f >> g))
 
--- | Allows storing 'Disposable's in a heterogenous container
-data SomeDisposable where
-    DisposeNone :: SomeDisposable
-    Dispose :: forall a. Disposable a => a -> SomeDisposable
-    DisposeList :: forall a. Disposable a => [a] -> SomeDisposable
+instance Monoid (Disposable ()) where
+    mempty = Disposable Nothing
+    mappend = (<>)
 
-instance Disposable SomeDisposable where
-    dispose DisposeNone = pure ()
-    dispose (Dispose a) = dispose a
-    dispose (DisposeList as) = traverse_ dispose as
+-- | A 'Dispose' is something with some resources tod release
+class Dispose a where
+    dispose :: a -> Disposable ()
+    default dispose :: (G.Generic a, GDispose (G.Rep a)) => a -> Disposable ()
+    dispose x = gDispose $ G.from x
 
--- | Allow generic deriving instances of things that can be made into 'SomeDisposable'
--- If a data type derives from Generic, and only contain instances of Disposing,
--- then it can also be made an instance of 'Disposing'.
--- Eg.
--- @
--- import Glazier.React as R
--- import GHCJS.Foreign.Callback as J
--- import GHC.Generics as G
---
--- data Plan = Plan
---     { _component :: R.ReactComponent
---     , _onRender :: J.Callback (J.JSVal -> IO J.JSVal)
---     ...
---     } deriving G.Generic
--- instance Disposing Plan
--- @
-class Disposing a where
-  disposing :: a -> SomeDisposable
-  default disposing :: (G.Generic a, GDisposing (G.Rep a)) => a -> SomeDisposable
-  disposing x = DisposeList . D.toList . gDisposing $ G.from x
-
-instance Disposing SomeDisposable where
-    disposing = id
-
-instance Disposing (J.Callback a) where
-    disposing = Dispose
-
-instance Disposing Int where
-    disposing _ = DisposeNone
-
-instance Disposing J.JSString where
-    disposing _ = DisposeNone
-
-instance Disposing J.JSVal where
-    disposing _ = DisposeNone
-
-instance Disposing a => Disposing (D.DList a) where
-    disposing xs = DisposeList $ disposing <$> D.toList xs
+instance Dispose (Disposable a) where
+    dispose = void
 
 -- | Generic instance basically traverses the data type structure
--- and expects the values to be all instances of 'Disposing'
-class GDisposing f where
-    gDisposing :: f p -> D.DList SomeDisposable
+-- and expects the values to be all instances of 'Dispose'
+class GDispose f where
+    gDispose :: f p -> Disposable ()
 
-instance GDisposing G.U1 where
-  gDisposing G.U1 = mempty
+instance GDispose G.U1 where
+  gDispose G.U1 = mempty
 
-instance (GDisposing f, GDisposing g) => GDisposing (f G.:+: g) where
-  gDisposing (G.L1 x) = gDisposing x
-  gDisposing (G.R1 x) = gDisposing x
+instance (GDispose f, GDispose g) => GDispose (f G.:+: g) where
+  gDispose (G.L1 x) = gDispose x
+  gDispose (G.R1 x) = gDispose x
 
-instance (GDisposing f, GDisposing g) => GDisposing (f G.:*: g) where
-  gDisposing (x G.:*: y) = (gDisposing x) <> (gDisposing y)
+instance (GDispose f, GDispose g) => GDispose (f G.:*: g) where
+  gDispose (x G.:*: y) = gDispose x <> gDispose y
 
-instance (Disposing c) => GDisposing (G.K1 i c) where
-  gDisposing (G.K1 x) = D.singleton $ disposing x
+instance (Dispose c) => GDispose (G.K1 i c) where
+  gDispose (G.K1 x) = dispose x
 
-instance (GDisposing f) => GDisposing (G.M1 i t f) where
-  gDisposing (G.M1 x) = gDisposing x
+instance (GDispose f) => GDispose (G.M1 i t f) where
+  gDispose (G.M1 x) = gDispose x
+
+------------------------------
+
+instance Dispose (J.Callback a) where
+    dispose = Disposable . Just . J.releaseCallback
+
+instance Dispose J.JSString where
+    dispose _ = mempty
+
+instance Dispose JE.JSVar where
+    dispose _ = mempty
+
+instance (Dispose a, Dispose b) => Dispose (a, b) where
+    dispose (a, b) = dispose a <> dispose b
+
+instance (Dispose a, Dispose b, Dispose c) => Dispose (a, b, c) where
+    dispose (a, b, c) = dispose a <> dispose b <> dispose c
+
+instance (Dispose a, Dispose b, Dispose c, Dispose d) => Dispose (a, b, c, d) where
+    dispose (a, b, c, d) = dispose a <> dispose b <> dispose c <> dispose d
+
+instance Dispose a => Dispose [a] where
+    dispose = foldMap dispose
+
+instance Dispose a => Dispose (DL.DList a) where
+    dispose = foldMap dispose
+
+instance Dispose a => Dispose (Maybe a) where
+    dispose = foldMap dispose
+
+instance Dispose Int where
+    dispose _ = mempty
+
+instance Dispose J.JSVal where
+    dispose _ = mempty
+
+instance Dispose a => Dispose (TVar a) where
+    dispose a = Disposable $ Just $ do
+        a' <- readTVarIO a
+        let Disposable f = dispose a' in case f of
+           Nothing -> pure ()
+           Just f' -> f'
+
+instance Dispose a => Dispose (TMVar a) where
+    dispose a = Disposable $ Just $ do
+        a' <- atomically $ readTMVar a
+        let Disposable f = dispose a' in case f of
+           Nothing -> pure ()
+           Just f' -> f'
+
+instance Dispose a => Dispose (IORef a) where
+    dispose a = Disposable $ Just $ do
+        a' <- readIORef a
+        let Disposable f = dispose a' in case f of
+           Nothing -> pure ()
+           Just f' -> f'

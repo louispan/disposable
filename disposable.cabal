@@ -1,7 +1,7 @@
 name:                disposable
-version:             0.2.0.4
+version:             0.3.0.0
 synopsis:            Allows storing different resource-releasing actions together.
-description:         SomeDisposable allows storing different resource releasing actions togther in a container.
+description:         Disposable allows storing different resource releasing actions togther in a container.
                      This library is useful for queueing up GHCJS.Foreign.Callback together to be released
                      after a new rendering frame.
 homepage:            https://github.com/louispan/disposable#readme
@@ -21,11 +21,13 @@ library
   exposed-modules:     Control.Disposable
   build-depends:       base >= 4.7 && < 5
                      , dlist >= 0.8 && < 0.9
+                     , javascript-extras >= 0.3.3.0
+                     , stm >= 2.4
   default-language:    Haskell2010
   if impl(ghcjs)
       build-depends: ghcjs-base
   if !impl(ghcjs)
-      build-depends: ghcjs-base-stub >= 0.1.0.2 && < 1
+      build-depends: ghcjs-base-stub >= 0.1.0.2
 
 source-repository head
   type:     git
