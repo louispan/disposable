@@ -4,6 +4,7 @@ module Control.Disposable
     , Dispose(..)
     ) where
 
+import Control.Concurrent
 import Control.Concurrent.STM
 import Data.IORef
 import Data.Maybe
@@ -49,4 +50,9 @@ instance Dispose a => Dispose (TMVar a) where
 instance Dispose a => Dispose (IORef a) where
     dispose a = Disposable . Just $ do
         Disposable b <- dispose <$> readIORef a
+        fromMaybe mempty b
+
+instance Dispose a => Dispose (MVar a) where
+    dispose a = Disposable . Just $ do
+        Disposable b <- dispose <$> readMVar a
         fromMaybe mempty b
