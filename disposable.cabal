@@ -1,5 +1,5 @@
 name:                disposable
-version:             0.3.0.0
+version:             1.0.0.0
 synopsis:            Allows storing different resource-releasing actions together.
 description:         Disposable allows storing different resource releasing actions togther in a container.
                      This library is useful for queueing up GHCJS.Foreign.Callback together to be released

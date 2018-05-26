@@ -6,8 +6,8 @@ This library is useful for queueing up GHCJS.Foreign.Callback together to be rel
 
 # Changelog
 
-* 0.3.0.0
+* 1.0.0.0
   - Breaking changes:
-    - removed SomeDisposable GADT; Disposable is now a newtype, and the typeclass is called Dispose.
+    - Simplified by removing SomeDisposable GADT; Disposable is now a newtype, and the typeclass is called Dispose.
     - The intention is no longer to create Disposable instances for everything.
     - Disposable is only used to provide a safe wrapper around IO to ensure that it performs no other side effects.
